@@ -558,6 +558,10 @@ function preserveReplacementHead(
           isAfterCanonicalCoverage(item.timelineCursor, canonicalCoverage) ||
           (item.kind === "assistant_message" &&
             canonicalTailAssistant?.kind === "assistant_message" &&
+            (item.messageId !== undefined
+              ? item.messageId === canonicalTailAssistant.messageId
+              : canonicalTailAssistant.messageId === undefined &&
+                item.id === canonicalTailAssistant.id) &&
             item.text.startsWith(canonicalTailAssistant.text)),
       )
     : currentHead.filter(
@@ -582,6 +586,12 @@ function preserveReplacementHead(
     !tailAssistant ||
     tailAssistant.kind !== "assistant_message"
   ) {
+    return { tail: reconciledTail, head: unreconciledHead, acknowledgedClientMessageIds: [] };
+  }
+
+  // Equal text from different provider messages is still two replies.
+  const differentIdentifiedMessages = liveAssistant.messageId !== tailAssistant.messageId;
+  if (differentIdentifiedMessages) {
     return { tail: reconciledTail, head: unreconciledHead, acknowledgedClientMessageIds: [] };
   }
 
