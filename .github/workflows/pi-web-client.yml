@@ -1,0 +1,60 @@
+name: Build Pi Web client
+
+on:
+  push:
+    branches: [release/pi-web-client]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pi-web-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      LEFTHOOK: "0"
+      EXPO_NO_TELEMETRY: "1"
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Build client for Pi Web
+        run: npm run build:web --workspace=@getpaseo/app
+        env:
+          PASEO_DIAGNOSTIC_REVISION: ${{ github.sha }}
+      - name: Verify source and app configuration
+        run: |
+          npx vitest run packages/app/app.config.test.ts packages/app/src/types/stream.test.ts packages/app/src/types/stream-event.test.ts packages/app/src/types/stream.harness.test.ts packages/app/src/timeline/session-stream-reducers.test.ts
+          npm run typecheck --workspace=@getpaseo/app
+      - name: Verify export and package static client
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const root='packages/app/dist';
+          const html=fs.readFileSync(root+'/index.html','utf8');
+          if (!html.includes('/paseo-web/_expo/')) throw new Error('Missing Pi Web asset base path');
+          fs.writeFileSync(root+'/pi-paseo-build.json',JSON.stringify({version:'0.13.0-woow.1',basePath:'/paseo-web',sourceCommit:process.env.GITHUB_SHA,repairCommit:'043aa8286b90418eb1f4e9982ca1a349c84f2a3d'})+'\n');
+          fs.copyFileSync('LICENSE',root+'/PASEO-LICENSE');
+          JS
+          find packages/app/dist -type f \( -name '*.js' -o -name '*.css' -o -name '*.html' -o -name '*.json' -o -name '*.svg' \) -exec gzip -k -6 {} \;
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -czf paseo-web-0.13.0-woow.1.tar.gz -C packages/app/dist .
+          sha256sum paseo-web-0.13.0-woow.1.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paseo-web-0.13.0-woow.1
+          path: |
+            paseo-web-0.13.0-woow.1.tar.gz
+            SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30

@@ -185,6 +185,7 @@ export default {
       ...(isProfileBuild || isWatchdogBuild ? [withAndroidProfileable] : []),
     ],
     experiments: {
+      baseUrl: "/paseo-web",
       typedRoutes: true,
       reactCompiler: true,
       autolinkingModuleResolution: true,
