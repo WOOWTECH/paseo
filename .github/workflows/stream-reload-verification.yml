@@ -1,0 +1,57 @@
+name: Stream reload verification
+
+on:
+  push:
+    branches: [ci/verify-stream-reload]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stream-reload-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      LEFTHOOK: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Verify repair source revision
+        run: |
+          git diff --exit-code 043aa8286b90418eb1f4e9982ca1a349c84f2a3d HEAD -- packages
+      - name: Install complete workspace dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Build app dependencies
+        run: npm run build:app-deps
+      - name: Check formatting of changed files
+        run: >-
+          npx oxfmt --check
+          packages/app/src/types/stream.ts
+          packages/app/src/types/stream.harness.test.ts
+          packages/app/src/timeline/session-stream-reducers.ts
+          packages/app/src/timeline/session-stream-reducers.test.ts
+      - name: Lint changed files
+        run: >-
+          npx oxlint
+          packages/app/src/types/stream.ts
+          packages/app/src/types/stream.harness.test.ts
+          packages/app/src/timeline/session-stream-reducers.ts
+          packages/app/src/timeline/session-stream-reducers.test.ts
+      - name: Run focused tests using repository configuration
+        run: >-
+          npx vitest run
+          packages/app/src/types/stream.test.ts
+          packages/app/src/types/stream-event.test.ts
+          packages/app/src/types/stream.harness.test.ts
+          packages/app/src/timeline/session-stream-reducers.test.ts
+      - name: Typecheck app with complete workspace dependencies
+        run: npm run typecheck --workspace=@getpaseo/app
